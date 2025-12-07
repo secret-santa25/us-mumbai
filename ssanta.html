@@ -1,0 +1,845 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Secret Santa US-Mumbai</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    
+    <!-- React & ReactDOM -->
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #0f172a; /* slate-900 */
+            color: #f1f5f9; /* slate-100 */
+        }
+        
+        /* Custom scrollbar for dark theme */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #1e293b; 
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #475569; 
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #64748b; 
+        }
+
+        .shake {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate3d(4px, 0, 0); }
+        }
+
+        /* Snowflake animation background */
+        .snowflake {
+            position: fixed;
+            top: -10px;
+            z-index: 0;
+            color: #fff;
+            opacity: 0.1;
+            font-size: 1em;
+            user-select: none;
+            cursor: default;
+            animation-name: snowflakes-fall, snowflakes-shake;
+            animation-duration: 10s, 3s;
+            animation-timing-function: linear, ease-in-out;
+            animation-iteration-count: infinite, infinite;
+            animation-play-state: running, running;
+        }
+        @keyframes snowflakes-fall {
+            0% { top: -10% }
+            100% { top: 100% }
+        }
+        @keyframes snowflakes-shake {
+            0% { transform: translateX(0px) }
+            50% { transform: translateX(80px) }
+            100% { transform: translateX(0px) }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef, useMemo } = React;
+
+        // --- Utils ---
+        const generatePin = () => Math.floor(1000 + Math.random() * 9000).toString();
+        
+        const shuffleArray = (array) => {
+            let arr = [...array];
+            for (let i = arr.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [arr[i], arr[j]] = [arr[j], arr[i]];
+            }
+            return arr;
+        };
+
+        const copyToClipboard = async (text) => {
+            try {
+                await navigator.clipboard.writeText(text);
+                return true;
+            } catch (err) {
+                // Fallback
+                const textArea = document.createElement("textarea");
+                textArea.value = text;
+                document.body.appendChild(textArea);
+                textArea.select();
+                try {
+                    document.execCommand('copy');
+                    document.body.removeChild(textArea);
+                    return true;
+                } catch (err) {
+                    document.body.removeChild(textArea);
+                    return false;
+                }
+            }
+        };
+
+        // --- Icons ---
+        const IconGift = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="20 12 20 22 4 22 4 12"></polyline><rect x="2" y="7" width="20" height="5"></rect><line x1="12" y1="22" x2="12" y2="7"></line><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z"></path><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z"></path></svg>
+        );
+        const IconTrash = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="3 6 5 6 21 6"></polyline><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path></svg>
+        );
+        const IconUser = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+        );
+        const IconLock = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+        );
+        const IconCheck = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><polyline points="20 6 9 17 4 12"></polyline></svg>
+        );
+        const IconSettings = ({ className }) => (
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path></svg>
+        );
+
+        // --- Common Components ---
+        const Card = ({ children, className = "" }) => (
+            <div className={`bg-slate-800 rounded-xl border border-slate-700 shadow-xl p-6 ${className}`}>
+                {children}
+            </div>
+        );
+
+        const Button = ({ children, onClick, variant = "primary", disabled = false, className = "" }) => {
+            const base = "px-4 py-2 rounded-lg font-semibold transition-all duration-200 flex items-center justify-center gap-2";
+            const variants = {
+                primary: "bg-red-600 hover:bg-red-500 text-white disabled:bg-slate-700 disabled:text-slate-500",
+                secondary: "bg-slate-700 hover:bg-slate-600 text-slate-100 disabled:opacity-50",
+                danger: "bg-red-900/50 hover:bg-red-900 text-red-200 border border-red-800",
+                ghost: "hover:bg-slate-700 text-slate-400 hover:text-white"
+            };
+            return (
+                <button onClick={onClick} disabled={disabled} className={`${base} ${variants[variant]} ${className}`}>
+                    {children}
+                </button>
+            );
+        };
+
+        const Input = ({ value, onChange, placeholder, type = "text", className="", onKeyDown }) => (
+            <input
+                type={type}
+                value={value}
+                onChange={onChange}
+                onKeyDown={onKeyDown}
+                placeholder={placeholder}
+                className={`w-full bg-slate-900 border border-slate-700 rounded-lg px-4 py-2 text-white focus:outline-none focus:ring-2 focus:ring-red-500 ${className}`}
+            />
+        );
+
+        const Modal = ({ isOpen, onClose, title, children }) => {
+            if (!isOpen) return null;
+            return (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
+                    <div className="bg-slate-800 w-full max-w-md rounded-2xl border border-slate-700 shadow-2xl overflow-hidden animate-[fadeIn_0.2s_ease-out]">
+                        <div className="bg-slate-900/50 p-4 border-b border-slate-700 flex justify-between items-center">
+                            <h3 className="text-lg font-bold text-white">{title}</h3>
+                            <button onClick={onClose} className="text-slate-400 hover:text-white">&times;</button>
+                        </div>
+                        <div className="p-6">
+                            {children}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Spin Wheel Component ---
+        const SpinWheel = ({ participants, target, onFinished }) => {
+            const canvasRef = useRef(null);
+            const [isSpinning, setIsSpinning] = useState(false);
+            
+            // Generate segments: target + random decoys
+            const segments = useMemo(() => {
+                const colors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#06b6d4', '#3b82f6', '#8b5cf6', '#d946ef'];
+                // Ensure target is there, fill rest with randoms excluding target
+                const decoys = participants.filter(p => p !== target);
+                const shuffledDecoys = shuffleArray(decoys).slice(0, 7); // Take 7 decoys max
+                const items = shuffleArray([target, ...shuffledDecoys]);
+                return items.map((label, i) => ({
+                    label,
+                    color: colors[i % colors.length]
+                }));
+            }, [participants, target]);
+
+            const drawWheel = (rotation) => {
+                const canvas = canvasRef.current;
+                if (!canvas) return;
+                const ctx = canvas.getContext('2d');
+                const centerX = canvas.width / 2;
+                const centerY = canvas.height / 2;
+                const radius = canvas.width / 2 - 10;
+                const arc = (2 * Math.PI) / segments.length;
+
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.save();
+                ctx.translate(centerX, centerY);
+                ctx.rotate(rotation);
+
+                segments.forEach((seg, i) => {
+                    const angle = i * arc;
+                    ctx.beginPath();
+                    ctx.fillStyle = seg.color;
+                    ctx.moveTo(0, 0);
+                    ctx.arc(0, 0, radius, angle, angle + arc);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Text
+                    ctx.save();
+                    ctx.translate(Math.cos(angle + arc / 2) * (radius * 0.65), Math.sin(angle + arc / 2) * (radius * 0.65));
+                    ctx.rotate(angle + arc / 2);
+                    ctx.fillStyle = "#fff";
+                    ctx.font = "bold 14px Inter";
+                    ctx.textAlign = "right";
+                    ctx.fillText(seg.label, radius * 0.25, 5);
+                    ctx.restore();
+                });
+                ctx.restore();
+
+                // Pointer
+                ctx.fillStyle = "white";
+                ctx.beginPath();
+                ctx.moveTo(centerX - 10, 10);
+                ctx.lineTo(centerX + 10, 10);
+                ctx.lineTo(centerX, 30);
+                ctx.fill();
+            };
+
+            useEffect(() => {
+                drawWheel(0);
+            }, [segments]);
+
+            const spin = () => {
+                if (isSpinning) return;
+                setIsSpinning(true);
+
+                const canvas = canvasRef.current;
+                const targetIndex = segments.findIndex(s => s.label === target);
+                const segmentAngle = (2 * Math.PI) / segments.length;
+                
+                // Calculate landing:
+                // Pointer is at top (Math.PI * 1.5 or -Math.PI/2 in canvas coords if we didn't rotate context)
+                // Actually in our draw logic, 0 is right. Pointer at top means 270 deg (3*PI/2).
+                // To land index i at 270deg, we need:
+                // current_rotation + (index * arc) + (arc/2) = 270deg + k * 360
+                
+                // Simplification: We want the final rotation to place the center of the target segment at -PI/2 (top).
+                const targetCenterAngle = targetIndex * segmentAngle + segmentAngle / 2;
+                // We want: rotation + targetCenterAngle = 3 * PI / 2 (270 deg)
+                // rotation = 3*PI/2 - targetCenterAngle
+                // Add lots of full spins (5 * 2PI)
+                
+                const spins = 10; // 10 full rotations
+                const baseTarget = (3 * Math.PI / 2) - targetCenterAngle;
+                const finalRotation = baseTarget + (spins * 2 * Math.PI);
+                
+                const duration = 4000;
+                const startTime = performance.now();
+
+                const animate = (time) => {
+                    const elapsed = time - startTime;
+                    const progress = Math.min(elapsed / duration, 1);
+                    // Ease out cubic
+                    const ease = 1 - Math.pow(1 - progress, 3);
+                    
+                    const currentRotation = finalRotation * ease;
+                    drawWheel(currentRotation);
+
+                    if (progress < 1) {
+                        requestAnimationFrame(animate);
+                    } else {
+                        // Done
+                        setTimeout(onFinished, 500);
+                    }
+                };
+
+                requestAnimationFrame(animate);
+            };
+
+            return (
+                <div className="flex flex-col items-center">
+                    <div className="relative mb-4">
+                        <canvas 
+                            ref={canvasRef} 
+                            width={300} 
+                            height={300} 
+                            className="rounded-full shadow-2xl border-4 border-slate-700 bg-slate-800"
+                        />
+                    </div>
+                    {!isSpinning && (
+                        <Button onClick={spin} className="w-full text-lg py-3 shadow-lg shadow-red-900/50">
+                            SPIN THE WHEEL! 🎁
+                        </Button>
+                    )}
+                    {isSpinning && (
+                        <p className="text-slate-400 animate-pulse">Finding your match...</p>
+                    )}
+                </div>
+            );
+        };
+
+        // --- Setup Phase ---
+        const SetupPhase = ({ data, onUpdate, onGenerate }) => {
+            const [newName, setNewName] = useState("");
+            const [manualGiver, setManualGiver] = useState("");
+            const [manualReceiver, setManualReceiver] = useState("");
+
+            const addParticipant = () => {
+                if (!newName.trim()) return;
+                if (data.participants.includes(newName.trim())) return alert("Name already exists!");
+                onUpdate({
+                    ...data,
+                    participants: [...data.participants, newName.trim()]
+                });
+                setNewName("");
+            };
+
+            const removeParticipant = (name) => {
+                // Remove from participants and any manual pairs
+                const newPairs = data.pairs.filter(p => p.giver !== name && p.receiver !== name);
+                const newParts = data.participants.filter(p => p !== name);
+                onUpdate({ ...data, participants: newParts, pairs: newPairs });
+            };
+
+            const addPair = () => {
+                if (!manualGiver || !manualReceiver) return;
+                if (manualGiver === manualReceiver) return alert("Cannot give to self!");
+                // Check if giver already assigned
+                if (data.pairs.find(p => p.giver === manualGiver)) return alert("This giver already has a pairing!");
+                // Check if receiver already assigned
+                if (data.pairs.find(p => p.receiver === manualReceiver)) return alert("This receiver is already assigned!");
+
+                onUpdate({
+                    ...data,
+                    pairs: [...data.pairs, { giver: manualGiver, receiver: manualReceiver }]
+                });
+                setManualGiver("");
+                setManualReceiver("");
+            };
+
+            const removePair = (giver) => {
+                onUpdate({
+                    ...data,
+                    pairs: data.pairs.filter(p => p.giver !== giver)
+                });
+            };
+
+            const clearAll = () => {
+                if(confirm("Are you sure you want to clear all participants?")) {
+                    onUpdate({ ...data, participants: [], pairs: [] });
+                }
+            };
+
+            // Validation for generate
+            const canGenerate = useMemo(() => {
+                if (data.participants.length < 3) return false;
+                if (data.isAutoMode) return true;
+                // Manual mode: Need every participant to be a giver once and receiver once?
+                // Minimal: every participant is a giver.
+                const givers = new Set(data.pairs.map(p => p.giver));
+                if (givers.size !== data.participants.length) return false;
+                return true;
+            }, [data]);
+
+            // Filter for manual dropdowns
+            const availableGivers = data.participants.filter(p => !data.pairs.find(pair => pair.giver === p));
+            // Receiver can be anyone who isn't already receiving and isn't the selected giver
+            const availableReceivers = (giverName) => data.participants.filter(p => 
+                p !== giverName && 
+                !data.pairs.find(pair => pair.receiver === p)
+            );
+
+            return (
+                <div className="max-w-6xl mx-auto p-4 space-y-6 animate-[fadeIn_0.5s_ease-out]">
+                    <div className="text-center space-y-2 mb-8">
+                        <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-red-600">
+                            Secret Santa US-Mumbai
+                        </h1>
+                        <p className="text-slate-400">Host: <span className="text-white font-semibold">Vimal Bajaj</span></p>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Left: Participants */}
+                        <Card className="flex flex-col h-[500px]">
+                            <div className="flex justify-between items-center mb-4">
+                                <h2 className="text-xl font-bold flex items-center gap-2">
+                                    <IconUser className="text-red-500"/> Participants 
+                                    <span className="bg-slate-700 text-xs px-2 py-1 rounded-full text-slate-300">{data.participants.length}</span>
+                                </h2>
+                                <button onClick={clearAll} className="text-xs text-red-400 hover:underline">Clear List</button>
+                            </div>
+                            
+                            <div className="flex gap-2 mb-4">
+                                <Input 
+                                    value={newName} 
+                                    onChange={(e) => setNewName(e.target.value)} 
+                                    onKeyDown={(e) => e.key === 'Enter' && addParticipant()}
+                                    placeholder="Enter name..." 
+                                />
+                                <Button onClick={addParticipant}>Add</Button>
+                            </div>
+
+                            <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+                                {data.participants.map(p => (
+                                    <div key={p} className="flex justify-between items-center bg-slate-900/50 p-3 rounded-lg border border-slate-700/50">
+                                        <span className="font-medium">{p}</span>
+                                        <button onClick={() => removeParticipant(p)} className="text-slate-500 hover:text-red-400">
+                                            <IconTrash className="w-4 h-4" />
+                                        </button>
+                                    </div>
+                                ))}
+                                {data.participants.length === 0 && (
+                                    <div className="text-center text-slate-500 mt-10">No participants yet.</div>
+                                )}
+                            </div>
+                        </Card>
+
+                        {/* Right: Pairings & Config */}
+                        <div className="space-y-6">
+                            <Card>
+                                <h2 className="text-xl font-bold mb-4 flex items-center gap-2">
+                                    <IconSettings className="text-red-500"/> Configuration
+                                </h2>
+                                
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg">
+                                        <div>
+                                            <div className="font-semibold text-sm">Pairing Mode</div>
+                                            <div className="text-xs text-slate-400">{data.isAutoMode ? "System randomizes pairs" : "Manually assign pairs"}</div>
+                                        </div>
+                                        <button 
+                                            onClick={() => onUpdate({...data, isAutoMode: !data.isAutoMode})}
+                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${data.isAutoMode ? 'bg-red-600' : 'bg-slate-600'}`}
+                                        >
+                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${data.isAutoMode ? 'translate-x-6' : 'translate-x-1'}`}/>
+                                        </button>
+                                    </div>
+
+                                    <div className="flex items-center justify-between p-3 bg-slate-900/50 rounded-lg">
+                                        <div>
+                                            <div className="font-semibold text-sm">PIN Protection</div>
+                                            <div className="text-xs text-slate-400">{data.usePin ? "Require PIN to reveal" : "No PIN required"}</div>
+                                        </div>
+                                        <button 
+                                            onClick={() => onUpdate({...data, usePin: !data.usePin})}
+                                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${data.usePin ? 'bg-red-600' : 'bg-slate-600'}`}
+                                        >
+                                            <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${data.usePin ? 'translate-x-6' : 'translate-x-1'}`}/>
+                                        </button>
+                                    </div>
+                                </div>
+                            </Card>
+
+                            {!data.isAutoMode && (
+                                <Card className="flex flex-col h-[300px]">
+                                    <h2 className="text-xl font-bold mb-4">Manual Mapping</h2>
+                                    <div className="flex gap-2 mb-4">
+                                        <select 
+                                            className="w-1/2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm"
+                                            value={manualGiver}
+                                            onChange={(e) => { setManualGiver(e.target.value); setManualReceiver(""); }}
+                                        >
+                                            <option value="">Select Giver</option>
+                                            {availableGivers.map(p => <option key={p} value={p}>{p}</option>)}
+                                        </select>
+                                        <select 
+                                            className="w-1/2 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-sm"
+                                            value={manualReceiver}
+                                            onChange={(e) => setManualReceiver(e.target.value)}
+                                            disabled={!manualGiver}
+                                        >
+                                            <option value="">Select Giftee</option>
+                                            {availableReceivers(manualGiver).map(p => <option key={p} value={p}>{p}</option>)}
+                                        </select>
+                                        <Button onClick={addPair} disabled={!manualGiver || !manualReceiver}>Link</Button>
+                                    </div>
+                                    <div className="flex-1 overflow-y-auto space-y-2 pr-2">
+                                        {data.pairs.map((p, idx) => (
+                                            <div key={idx} className="flex justify-between items-center text-sm bg-slate-900/50 p-2 rounded border border-slate-700/30">
+                                                <span>{p.giver} &rarr; <span className="text-red-300">{p.receiver}</span></span>
+                                                <button onClick={() => removePair(p.giver)} className="text-slate-500 hover:text-red-400"><IconTrash className="w-3 h-3"/></button>
+                                            </div>
+                                        ))}
+                                        {data.pairs.length === 0 && <div className="text-center text-slate-600 text-xs">No pairs defined.</div>}
+                                    </div>
+                                </Card>
+                            )}
+
+                            <Button 
+                                onClick={onGenerate} 
+                                disabled={!canGenerate} 
+                                className="w-full py-4 text-lg shadow-lg shadow-red-900/20"
+                            >
+                                <IconGift /> Generate Secret Santa Pairings
+                            </Button>
+                            {!canGenerate && (
+                                <p className="text-xs text-center text-yellow-500">
+                                    Requires 3+ participants {(!data.isAutoMode) && "and complete manual pairs"}.
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        // --- Reveal Phase ---
+        const RevealPhase = ({ data, onUpdate, onReset }) => {
+            const [selectedGiver, setSelectedGiver] = useState(null);
+            const [modalView, setModalView] = useState('none'); // pin, wheel, result, adminLogin, adminPanel
+            const [pinInput, setPinInput] = useState("");
+            const [shake, setShake] = useState(false);
+            const [spinTarget, setSpinTarget] = useState(null);
+
+            const handleCardClick = (name) => {
+                const isRevealed = data.revealed[name];
+                if (isRevealed) return; // Do nothing if already done
+                
+                setSelectedGiver(name);
+                // Find receiver
+                const pair = data.pairs.find(p => p.giver === name);
+                setSpinTarget(pair ? pair.receiver : "Error");
+
+                if (data.usePin) {
+                    setPinInput("");
+                    setModalView('pin');
+                } else {
+                    setModalView('wheel');
+                }
+            };
+
+            const submitPin = () => {
+                const correctPin = data.pins[selectedGiver];
+                if (pinInput === correctPin) {
+                    setModalView('wheel');
+                } else {
+                    setShake(true);
+                    setTimeout(() => setShake(false), 500);
+                }
+            };
+
+            const handleSpinFinished = () => {
+                setModalView('result');
+            };
+
+            const closeResult = () => {
+                // Mark as revealed
+                onUpdate({
+                    ...data,
+                    revealed: { ...data.revealed, [selectedGiver]: true }
+                });
+                setModalView('none');
+                setSelectedGiver(null);
+            };
+
+            // Admin Logic
+            const [adminPinInput, setAdminPinInput] = useState("");
+            const submitAdminPin = () => {
+                if (adminPinInput === "1066") {
+                    setModalView('adminPanel');
+                    setAdminPinInput("");
+                } else {
+                    setShake(true);
+                    setTimeout(() => setShake(false), 500);
+                }
+            };
+
+            const copyMasterList = () => {
+                const text = data.pairs.map(p => `${p.giver} | PIN: ${data.pins[p.giver]} | -> ${p.receiver}`).join('\n');
+                copyToClipboard(text).then(ok => ok ? alert("Copied!") : alert("Copy failed"));
+            };
+
+            const copyPinMessages = () => {
+                const text = data.pairs.map(p => {
+                    return `Hi ${p.giver}! 🎅\nYour Secret Santa PIN is: ${data.pins[p.giver]}\nUse this to reveal your match!`;
+                }).join('\n\n----------------------------\n\n');
+                copyToClipboard(text).then(ok => ok ? alert("Copied!") : alert("Copy failed"));
+            };
+
+            return (
+                <div className="max-w-6xl mx-auto p-4 animate-[fadeIn_0.5s_ease-out]">
+                    <div className="flex justify-between items-start mb-8">
+                        <div>
+                            <h1 className="text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-red-600">
+                                Secret Santa Draw
+                            </h1>
+                            <p className="text-slate-400">Find your name to reveal your match!</p>
+                        </div>
+                        <Button variant="secondary" onClick={() => setModalView('adminLogin')}>
+                            <IconSettings className="w-4 h-4"/> Admin
+                        </Button>
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+                        {data.participants.map(name => {
+                            const isDone = data.revealed[name];
+                            return (
+                                <div 
+                                    key={name}
+                                    onClick={() => handleCardClick(name)}
+                                    className={`
+                                        relative group cursor-pointer h-32 rounded-xl flex flex-col items-center justify-center p-4 transition-all duration-300
+                                        ${isDone 
+                                            ? 'bg-slate-900/50 border border-slate-800 text-slate-600' 
+                                            : 'bg-slate-800 border border-slate-700 hover:border-red-500 hover:shadow-lg hover:shadow-red-900/20 hover:-translate-y-1'
+                                        }
+                                    `}
+                                >
+                                    {isDone && (
+                                        <div className="absolute top-2 right-2 text-green-500">
+                                            <IconCheck />
+                                        </div>
+                                    )}
+                                    <div className={`w-12 h-12 rounded-full flex items-center justify-center text-xl font-bold mb-2 ${isDone ? 'bg-slate-800' : 'bg-gradient-to-br from-red-500 to-orange-500 text-white'}`}>
+                                        {name.charAt(0).toUpperCase()}
+                                    </div>
+                                    <div className="font-semibold text-center truncate w-full">{name}</div>
+                                    {isDone && <div className="text-xs mt-1">Matched</div>}
+                                </div>
+                            );
+                        })}
+                    </div>
+
+                    {/* Modals */}
+                    
+                    {/* PIN Entry */}
+                    <Modal isOpen={modalView === 'pin'} onClose={() => setModalView('none')} title={`Welcome, ${selectedGiver}!`}>
+                        <div className="space-y-4">
+                            <p className="text-slate-300">Please enter your 4-digit PIN to verify your identity.</p>
+                            <div className={shake ? 'shake' : ''}>
+                                <Input 
+                                    type="password" 
+                                    placeholder="0000" 
+                                    value={pinInput} 
+                                    onChange={e => {
+                                        const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                                        setPinInput(val);
+                                    }}
+                                    className="text-center text-2xl tracking-[0.5em] font-mono"
+                                />
+                            </div>
+                            <Button onClick={submitPin} className="w-full py-3" disabled={pinInput.length !== 4}>
+                                Verify PIN <IconLock className="w-4 h-4" />
+                            </Button>
+                        </div>
+                    </Modal>
+
+                    {/* Wheel */}
+                    <Modal isOpen={modalView === 'wheel'} onClose={() => {}} title="Who is it?">
+                        <SpinWheel participants={data.participants} target={spinTarget} onFinished={handleSpinFinished} />
+                    </Modal>
+
+                    {/* Result */}
+                    <Modal isOpen={modalView === 'result'} onClose={closeResult} title="Your Match!">
+                        <div className="text-center space-y-6 py-4">
+                            <p className="text-slate-400">You are the Secret Santa for...</p>
+                            <div className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-br from-yellow-300 to-yellow-600 py-2">
+                                {spinTarget}
+                            </div>
+                            <div className="bg-slate-900/50 p-4 rounded-lg text-sm text-slate-400">
+                                🤫 Shh! Keep it a secret until the party!
+                            </div>
+                            <Button onClick={closeResult} className="w-full">Got it!</Button>
+                        </div>
+                    </Modal>
+
+                    {/* Admin Login */}
+                    <Modal isOpen={modalView === 'adminLogin'} onClose={() => setModalView('none')} title="Admin Access">
+                        <div className="space-y-4">
+                            <p className="text-slate-300 text-sm">Enter Host PIN (1066)</p>
+                            <div className={shake ? 'shake' : ''}>
+                                <Input 
+                                    type="password" 
+                                    value={adminPinInput} 
+                                    onChange={e => setAdminPinInput(e.target.value)} 
+                                    className="text-center"
+                                />
+                            </div>
+                            <Button onClick={submitAdminPin} className="w-full">Login</Button>
+                        </div>
+                    </Modal>
+
+                    {/* Admin Panel */}
+                    <Modal isOpen={modalView === 'adminPanel'} onClose={() => setModalView('none')} title="Admin Panel">
+                        <div className="space-y-4">
+                            <div className="flex gap-2 mb-4">
+                                <Button onClick={copyMasterList} variant="secondary" className="text-xs flex-1">Copy Master List</Button>
+                                <Button onClick={copyPinMessages} variant="secondary" className="text-xs flex-1">Copy PIN Msg</Button>
+                            </div>
+                            
+                            <div className="max-h-60 overflow-y-auto bg-slate-900/50 rounded-lg border border-slate-700 p-2 space-y-2">
+                                {data.pairs.map((p, i) => (
+                                    <div key={i} className="flex justify-between items-center text-xs p-2 hover:bg-slate-800 rounded">
+                                        <div className="flex items-center gap-2">
+                                            <span className="font-bold w-20 truncate">{p.giver}</span>
+                                            <span className="text-slate-500">&rarr;</span>
+                                            <span className="text-yellow-500 w-20 truncate">{p.receiver}</span>
+                                        </div>
+                                        <div className="font-mono text-slate-400 bg-slate-800 px-2 py-1 rounded">{data.pins[p.giver] || "N/A"}</div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <div className="pt-4 border-t border-slate-700">
+                                <Button onClick={onReset} variant="danger" className="w-full text-sm">
+                                    Reset Everything (Clear Data)
+                                </Button>
+                            </div>
+                        </div>
+                    </Modal>
+                </div>
+            );
+        };
+
+        // --- Main App ---
+        const SecretSantaApp = () => {
+            const [state, setState] = useState({
+                phase: 'setup', // setup | reveal
+                participants: [],
+                pairs: [], // {giver, receiver}
+                pins: {}, // {giver: pin}
+                revealed: {}, // {giver: true/false}
+                isAutoMode: true,
+                usePin: true
+            });
+            const [loaded, setLoaded] = useState(false);
+
+            useEffect(() => {
+                const saved = localStorage.getItem('secretSantaState');
+                if (saved) {
+                    try {
+                        setState(JSON.parse(saved));
+                    } catch (e) { console.error("Load error", e); }
+                }
+                setLoaded(true);
+            }, []);
+
+            useEffect(() => {
+                if (loaded) {
+                    localStorage.setItem('secretSantaState', JSON.stringify(state));
+                }
+            }, [state, loaded]);
+
+            const handleGenerate = () => {
+                let finalPairs = [];
+                const parts = [...state.participants];
+                const newPins = {};
+
+                if (state.isAutoMode) {
+                    // Logic: Shuffle parts, shift by 1
+                    const shuffled = shuffleArray(parts);
+                    for (let i = 0; i < shuffled.length; i++) {
+                        const giver = shuffled[i];
+                        const receiver = shuffled[(i + 1) % shuffled.length];
+                        finalPairs.push({ giver, receiver });
+                    }
+                } else {
+                    finalPairs = state.pairs;
+                }
+
+                // Generate PINs if needed (or always generate them just in case toggle changes later)
+                finalPairs.forEach(p => {
+                    newPins[p.giver] = generatePin();
+                });
+
+                setState({
+                    ...state,
+                    pairs: finalPairs,
+                    pins: newPins,
+                    phase: 'reveal',
+                    revealed: {} // reset revealed status
+                });
+            };
+
+            const handleReset = () => {
+                if(confirm("DANGER: This will delete all data and return to Setup. Proceed?")) {
+                    localStorage.removeItem('secretSantaState');
+                    window.location.reload();
+                }
+            };
+
+            if (!loaded) return null;
+
+            return (
+                <div className="min-h-screen pb-10 relative">
+                    {/* Snow background */}
+                    <div className="snowflake">❅</div>
+                    <div className="snowflake" style={{left: '10%', animationDelay: '1s'}}>❅</div>
+                    <div className="snowflake" style={{left: '20%', animationDelay: '6s'}}>❆</div>
+                    <div className="snowflake" style={{left: '30%', animationDelay: '4s'}}>❅</div>
+                    <div className="snowflake" style={{left: '40%', animationDelay: '2s'}}>❆</div>
+                    <div className="snowflake" style={{left: '50%', animationDelay: '8s'}}>❅</div>
+                    <div className="snowflake" style={{left: '60%', animationDelay: '6s'}}>❆</div>
+                    <div className="snowflake" style={{left: '70%', animationDelay: '2.5s'}}>❅</div>
+                    <div className="snowflake" style={{left: '80%', animationDelay: '1s'}}>❆</div>
+                    <div className="snowflake" style={{left: '90%', animationDelay: '3s'}}>❅</div>
+
+                    <div className="relative z-10 pt-10">
+                        {state.phase === 'setup' ? (
+                            <SetupPhase 
+                                data={state} 
+                                onUpdate={setState} 
+                                onGenerate={handleGenerate} 
+                            />
+                        ) : (
+                            <RevealPhase 
+                                data={state} 
+                                onUpdate={setState} 
+                                onReset={handleReset}
+                            />
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<SecretSantaApp />);
+    </script>
+</body>
+</html>
