@@ -813,7 +813,7 @@
 
                 if (!user) return;
 
-                const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'secretSantaState');
+                const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'secretSantaState', 'main');
                 
                 const unsubscribe = window.onSnapshot(docRef, (docSnap) => {
                     if (docSnap.exists()) {
@@ -837,7 +837,7 @@
 
                 if (user) {
                     try {
-                        const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'secretSantaState');
+                        const docRef = window.doc(window.db, 'artifacts', window.appId, 'public', 'data', 'secretSantaState', 'main');
                         await window.setDoc(docRef, newState);
                     } catch (e) {
                         console.error("Save error:", e);
